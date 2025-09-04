@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: E‑Commerce Product Management API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Spec‑driven API for an event‑driven product management system.
 
@@ -110,7 +110,7 @@ components:
     # Event contracts (schemas for emitted events)
     Envelope:
       type: object
-      description: Standard event envelope
+      description: Standard event envelope (CloudEvents 1.0 compatible)
       properties:
         id:
           type: string
@@ -201,6 +201,7 @@ components:
 paths:
   /health:
     get:
+      operationId: getHealth
       tags: [Ops]
       summary: Health check
       responses:
@@ -208,6 +209,7 @@ paths:
           description: OK
   /products:
     post:
+      operationId: createProduct
       tags: [Products]
       summary: Create product and emit ProductCreated
       requestBody:
@@ -234,7 +236,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          description: Missing or invalid seller header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     get:
+      operationId: listProducts
       tags: [Products]
       summary: List products owned by the seller
       parameters:
@@ -244,7 +253,8 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
-          description: Page size (default 25)
+            default: 25
+          description: Page size (default 25, max 100)
         - in: query
           name: cursor
           schema:
@@ -266,7 +276,31 @@ paths:
                     type: string
                     nullable: true
   /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [Products]
+      summary: Retrieve a single product by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     put:
+      operationId: updateProduct
       tags: [Products]
       summary: Update a product and emit ProductUpdated (and possibly LowStockWarning)
       parameters:
@@ -301,6 +335,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
     delete:
+      operationId: deleteProduct
       tags: [Products]
       summary: Delete a product and emit ProductDeleted
       parameters:
@@ -320,13 +355,17 @@ paths:
                 $ref: '#/components/schemas/Problem'
   /events/stream:
     get:
+      operationId: streamEvents
       tags: [Events]
       summary: Server‑Sent Events (SSE) stream with low‑stock alerts and other events
       description: |
         Emits events in SSE format. The UI subscribes and displays notifications.
 
+        Server must set:
+        - `Content-Type: text/event-stream`
+        - `Cache-Control: no-cache`
+
         Event format examples (SSE):
-        
         ```
         event: LowStockWarning\n
         data: {"productId":"123","sellerId":"seller-9f3c5","quantity":2,"threshold":3}\n\n
@@ -354,9 +393,9 @@ paths:
                     event: LowStockWarning\n
                     id: 01J8M46TB3T9K3Q86K1G8E6K9V\n
                     data: {"productId":"123","sellerId":"seller-9f3c5","quantity":2,"threshold":3}\n
-  # Optional advanced endpoints leveraging Node.js Streams
   /products/export:
     get:
+      operationId: exportProducts
       tags: [Bulk]
       summary: Stream export of products as NDJSON (newline‑delimited JSON)
       parameters:
@@ -379,6 +418,7 @@ paths:
               schema:
                 type: string
     post:
+      operationId: importProducts
       tags: [Bulk]
       summary: Import products from NDJSON stream (upsert by name or external key)
       requestBody:
