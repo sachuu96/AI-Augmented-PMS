@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "./envelope.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "ProductCreated"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "product": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "sellerId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "price": {
+              "type": "number"
+            },
+            "quantity": {
+              "type": "integer"
+            },
+            "category": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "id",
+            "sellerId",
+            "name",
+            "price",
+            "quantity",
+            "category",
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "product"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Event id (ULID)"
+    },
+    "type": {
+      "type": "string",
+      "description": "Event type name"
+    },
+    "source": {
+      "type": "string"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "specversion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "source",
+    "time",
+    "specversion",
+    "data"
+  ]
+}

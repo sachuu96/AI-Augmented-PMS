@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "./envelope.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "ProductUpdated"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "product": {
+          "$ref": "./defs.product.json"
+        },
+        "previous": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "product"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
