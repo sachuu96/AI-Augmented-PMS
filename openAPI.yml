@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: E‑Commerce Product Management API
+  version: 0.1.0
+  description: |
+    Spec‑driven API for an event‑driven product management system.
+
+    Notes:
+    - **AuthN/Z (documented approach only):** Requests must include an `X-Seller-Id` header.
+      The service enforces that sellers can manage **only their own** products.
+    - **Events:** `ProductCreated`, `ProductUpdated`, `ProductDeleted`, `LowStockWarning` are emitted to the event bus.
+    - **Notifications:** UI can subscribe to Server‑Sent Events (SSE) at `/events/stream`.
+    - **Id types:** `productId` is an auto‑incrementing integer in the DB but surfaced as string in API for forward compatibility.
+servers:
+  - url: http://localhost:4000
+    description: Local dev server
+
+security:
+  - SellerIdHeader: []
+
+components:
+  securitySchemes:
+    SellerIdHeader:
+      type: apiKey
+      in: header
+      name: X-Seller-Id
+      description: Seller identity for request scoping and authorization.
+  schemas:
+    Problem:
+      type: object
+      properties:
+        status:
+          type: integer
+        title:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+      required: [status, title]
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "123"
+        sellerId:
+          type: string
+          description: Owner of the product (from X-Seller-Id)
+          example: "seller-9f3c5"
+        name:
+          type: string
+          example: "Wireless Mouse"
+        description:
+          type: string
+          example: "Ergonomic 2.4G wireless mouse"
+        price:
+          type: number
+          format: float
+          example: 24.99
+        quantity:
+          type: integer
+          example: 8
+        category:
+          type: string
+          example: "Accessories"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, sellerId, name, price, quantity, category, createdAt, updatedAt]
+    NewProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+          minimum: 0
+        quantity:
+          type: integer
+          minimum: 0
+        category:
+          type: string
+      required: [name, price, quantity, category]
+    UpdateProductRequest:
+      type: object
+      description: Full update (PUT). Provide all mutable fields.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+          minimum: 0
+        quantity:
+          type: integer
+          minimum: 0
+        category:
+          type: string
+      required: [name, price, quantity, category]
+
+    # Event contracts (schemas for emitted events)
+    Envelope:
+      type: object
+      description: Standard event envelope
+      properties:
+        id:
+          type: string
+          description: Event id (ULID)
+        type:
+          type: string
+          example: ProductCreated
+        source:
+          type: string
+          example: products-api
+        time:
+          type: string
+          format: date-time
+        specversion:
+          type: string
+          example: "1.0"
+        data:
+          type: object
+      required: [id, type, source, time, specversion, data]
+    ProductCreated:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ProductCreated]
+            data:
+              type: object
+              properties:
+                product:
+                  $ref: '#/components/schemas/Product'
+              required: [product]
+    ProductUpdated:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ProductUpdated]
+            data:
+              type: object
+              properties:
+                product:
+                  $ref: '#/components/schemas/Product'
+                previous:
+                  type: object
+                  description: Optional snapshot of selected previous fields
+              required: [product]
+    ProductDeleted:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ProductDeleted]
+            data:
+              type: object
+              properties:
+                productId:
+                  type: string
+                sellerId:
+                  type: string
+              required: [productId, sellerId]
+    LowStockWarning:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [LowStockWarning]
+            data:
+              type: object
+              properties:
+                productId:
+                  type: string
+                sellerId:
+                  type: string
+                quantity:
+                  type: integer
+                threshold:
+                  type: integer
+              required: [productId, sellerId, quantity, threshold]
+
+paths:
+  /health:
+    get:
+      tags: [Ops]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /products:
+    post:
+      tags: [Products]
+      summary: Create product and emit ProductCreated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewProductRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: URL of the new resource
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags: [Products]
+      summary: List products owned by the seller
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size (default 25)
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Cursor for pagination
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  nextCursor:
+                    type: string
+                    nullable: true
+  /products/{id}:
+    put:
+      tags: [Products]
+      summary: Update a product and emit ProductUpdated (and possibly LowStockWarning)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict (e.g., version mismatch)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags: [Products]
+      summary: Delete a product and emit ProductDeleted
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /events/stream:
+    get:
+      tags: [Events]
+      summary: Server‑Sent Events (SSE) stream with low‑stock alerts and other events
+      description: |
+        Emits events in SSE format. The UI subscribes and displays notifications.
+
+        Event format examples (SSE):
+        
+        ```
+        event: LowStockWarning\n
+        data: {"productId":"123","sellerId":"seller-9f3c5","quantity":2,"threshold":3}\n\n
+        event: ProductUpdated\n
+        data: {"product":{"id":"123", ...}}
+        ```
+      parameters:
+        - in: header
+          name: Last-Event-ID
+          schema:
+            type: string
+          required: false
+          description: Resume from last event id (best‑effort)
+      responses:
+        '200':
+          description: OK (SSE stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                lowStock:
+                  summary: Low stock event
+                  value: |
+                    event: LowStockWarning\n
+                    id: 01J8M46TB3T9K3Q86K1G8E6K9V\n
+                    data: {"productId":"123","sellerId":"seller-9f3c5","quantity":2,"threshold":3}\n
+  # Optional advanced endpoints leveraging Node.js Streams
+  /products/export:
+    get:
+      tags: [Bulk]
+      summary: Stream export of products as NDJSON (newline‑delimited JSON)
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [ndjson]
+            default: ndjson
+      responses:
+        '200':
+          description: NDJSON stream
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: 'attachment; filename="products.ndjson"'
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+    post:
+      tags: [Bulk]
+      summary: Import products from NDJSON stream (upsert by name or external key)
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: string
+      responses:
+        '202':
+          description: Accepted for processing (streamed)
+
+tags:
+  - name: Products
+  - name: Events
+  - name: Bulk
+  - name: Ops
